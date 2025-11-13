@@ -10,7 +10,9 @@ import 'package:sentineleye/widgets/bottom_bar.dart';
 import 'package:sentineleye/widgets/detection_list_panel.dart';
 
 class CameraScreen extends StatefulWidget {
-  const CameraScreen({super.key});
+  final VoidCallback? onBack;
+
+  const CameraScreen({super.key, this.onBack});
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -204,8 +206,23 @@ class _CameraScreenState extends State<CameraScreen> {
             onConfidenceChanged: (value) {
               setState(() => _confidenceThreshold = value);
             },
+            leading: GestureDetector(
+              onTap: () => widget.onBack?.call(),
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white24, width: 1.0),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 18),
+              ),
+            ),
           ),
         ),
+        
         DetectionListPanel(
           detections: _detections,
           confidenceThreshold: _confidenceThreshold,

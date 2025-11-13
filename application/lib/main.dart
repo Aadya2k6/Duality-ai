@@ -38,10 +38,14 @@ class _SafetyAppState extends State<SafetyApp> {
     setState(() => _showCamera = true);
   }
 
+  void _stopDetection() {
+    setState(() => _showCamera = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_showCamera) {
-      return const CameraScreen();
+      return CameraScreen(onBack: _stopDetection);
     }
     return LandingPage(onStartDetection: _startDetection);
   }

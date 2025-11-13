@@ -4,12 +4,14 @@ class TopPanel extends StatefulWidget {
   final int fps;
   final double confidenceThreshold;
   final Function(double) onConfidenceChanged;
+  final Widget? leading;
 
   const TopPanel({
     super.key,
     required this.fps,
     required this.confidenceThreshold,
     required this.onConfidenceChanged,
+    this.leading,
   });
 
   @override
@@ -47,6 +49,12 @@ class _TopPanelState extends State<TopPanel> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                if (widget.leading != null) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: widget.leading!,
+                  ),
+                ],
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

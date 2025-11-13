@@ -27,7 +27,7 @@ class MLService {
     ];
     results.add(DetectionResult(
       box: helmetBox,
-      label: 'Safety Helmet',
+      label: _safetyLabels[0],
       score: 0.85 + random.nextDouble() * 0.14,
     ));
 
@@ -39,7 +39,7 @@ class MLService {
     ];
     results.add(DetectionResult(
       box: extinguisherBox,
-      label: 'Fire Extinguisher',
+      label: _safetyLabels[1],
       score: 0.88 + random.nextDouble() * 0.11,
     ));
 
@@ -52,7 +52,7 @@ class MLService {
       ];
       results.add(DetectionResult(
         box: vestBox,
-        label: 'Safety Vest',
+        label: _safetyLabels[2],
         score: 0.80 + random.nextDouble() * 0.18,
       ));
     }
