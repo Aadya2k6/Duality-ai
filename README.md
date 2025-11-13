@@ -1,4 +1,3 @@
-uugg
 # HackwithBangalore 2025: Space Station Safety Object Detection
 ## Duality AI's Space Station Challenge - Flutter Application
 
