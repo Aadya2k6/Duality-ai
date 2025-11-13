@@ -25,6 +25,15 @@ class BoundingBoxPainter extends CustomPainter {
   final List<DetectionResult> detections;
   final bool isDarkMode;
 
+  static const List<Color> _boxColors = [
+    Color(0xFF34D399),
+    Color(0xFF60A5FA),
+    Color(0xFFFBBF24),
+    Color(0xFFF87171),
+    Color(0xFFA78BFA),
+    Color(0xFFEC4899),
+  ];
+
   BoundingBoxPainter({
     required this.detections,
     required this.isDarkMode,
@@ -32,16 +41,19 @@ class BoundingBoxPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final boxPaint = Paint()
-      ..color = isDarkMode ? const Color(0xFF34D399) : const Color(0xFF10B981)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0;
-
     final textPainter = TextPainter(
       textDirection: TextDirection.ltr,
     );
 
-    for (final detection in detections) {
+    for (var i = 0; i < detections.length; i++) {
+      final detection = detections[i];
+      final boxColor = _boxColors[i % _boxColors.length];
+
+      final boxPaint = Paint()
+        ..color = boxColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.0;
+
       final box = detection.box;
       final left = box[0] * size.width;
       final top = box[1] * size.height;
@@ -73,9 +85,7 @@ class BoundingBoxPainter extends CustomPainter {
       textPainter.layout();
 
       final labelBackgroundPaint = Paint()
-        ..color =
-            (isDarkMode ? const Color(0xFF34D399) : const Color(0xFF10B981))
-                .withValues(alpha: 0.9);
+        ..color = boxColor.withValues(alpha: 0.9);
 
       final labelRect = Rect.fromLTWH(
         left,

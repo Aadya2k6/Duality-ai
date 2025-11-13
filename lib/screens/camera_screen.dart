@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:sentineleye/models/detection_result.dart';
 import 'package:sentineleye/services/ml_service.dart';
 import 'package:sentineleye/widgets/bounding_box_overlay.dart';
+import 'package:sentineleye/widgets/top_panel.dart';
+import 'package:sentineleye/widgets/bottom_bar.dart';
+import 'package:sentineleye/widgets/detection_list_panel.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -15,6 +18,8 @@ class CameraScreen extends StatefulWidget {
 
 class _CameraScreenState extends State<CameraScreen> {
   CameraController? _controller;
+  List<CameraDescription> _cameras = [];
+  int _currentCameraIndex = 0;
   List<DetectionResult> _detections = [];
   bool _isProcessing = false;
   bool _isInitialized = false;
@@ -22,6 +27,8 @@ class _CameraScreenState extends State<CameraScreen> {
   int _frameCount = 0;
   int _fps = 0;
   Timer? _fpsTimer;
+  bool _isFlashOn = false;
+  double _confidenceThreshold = 0.5;
 
   @override
   void initState() {
@@ -43,45 +50,76 @@ class _CameraScreenState extends State<CameraScreen> {
 
   Future<void> _initializeCamera() async {
     try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) {
+      _cameras = await availableCameras();
+      if (_cameras.isEmpty) {
         setState(() => _error = 'No cameras available');
         return;
       }
 
-      _controller = CameraController(
-        cameras.first,
-        ResolutionPreset.high,
-        enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.yuv420,
-      );
-
-      await _controller!.initialize();
-
-      if (!mounted) return;
-
-      setState(() => _isInitialized = true);
-
-      _controller!.startImageStream((image) async {
-        if (!_isProcessing) {
-          _isProcessing = true;
-          _frameCount++;
-
-          try {
-            final results = await compute(MLService.mockInference, image);
-
-            if (mounted) {
-              setState(() => _detections = results);
-            }
-          } catch (e) {
-            debugPrint('Error processing frame: $e');
-          } finally {
-            _isProcessing = false;
-          }
-        }
-      });
+      await _setupCamera(_currentCameraIndex);
     } catch (e) {
       setState(() => _error = 'Failed to initialize camera: $e');
+    }
+  }
+
+  Future<void> _setupCamera(int cameraIndex) async {
+    if (_controller != null) {
+      await _controller!.dispose();
+    }
+
+    _controller = CameraController(
+      _cameras[cameraIndex],
+      ResolutionPreset.high,
+      enableAudio: false,
+      imageFormatGroup: ImageFormatGroup.yuv420,
+    );
+
+    await _controller!.initialize();
+
+    if (!mounted) return;
+
+    setState(() => _isInitialized = true);
+
+    _controller!.startImageStream((image) async {
+      if (!_isProcessing) {
+        _isProcessing = true;
+        _frameCount++;
+
+        try {
+          final results = await compute(MLService.mockInference, image);
+
+          if (mounted) {
+            setState(() => _detections = results);
+          }
+        } catch (e) {
+          debugPrint('Error processing frame: $e');
+        } finally {
+          _isProcessing = false;
+        }
+      }
+    });
+  }
+
+  Future<void> _switchCamera() async {
+    if (_cameras.length < 2) return;
+
+    setState(() {
+      _isInitialized = false;
+      _currentCameraIndex = (_currentCameraIndex + 1) % _cameras.length;
+    });
+
+    await _setupCamera(_currentCameraIndex);
+  }
+
+  Future<void> _toggleFlash() async {
+    if (_controller == null) return;
+
+    try {
+      final newFlashMode = _isFlashOn ? FlashMode.off : FlashMode.torch;
+      await _controller!.setFlashMode(newFlashMode);
+      setState(() => _isFlashOn = !_isFlashOn);
+    } catch (e) {
+      debugPrint('Error toggling flash: $e');
     }
   }
 
@@ -139,6 +177,8 @@ class _CameraScreenState extends State<CameraScreen> {
   Widget _buildCameraView(bool isDarkMode) {
     final size = MediaQuery.of(context).size;
     final cameraAspectRatio = _controller!.value.aspectRatio;
+    final filteredDetections =
+        _detections.where((d) => d.score >= _confidenceThreshold).toList();
 
     return Stack(
       children: [
@@ -150,7 +190,7 @@ class _CameraScreenState extends State<CameraScreen> {
         ),
         Positioned.fill(
           child: BoundingBoxOverlay(
-            detections: _detections,
+            detections: filteredDetections,
             previewSize: size,
           ),
         ),
@@ -158,143 +198,31 @@ class _CameraScreenState extends State<CameraScreen> {
           top: 0,
           left: 0,
           right: 0,
-          child: CameraHeader(
-              detectionCount: _detections.length,
-              fps: _fps,
-              isDarkMode: isDarkMode),
+          child: TopPanel(
+            fps: _fps,
+            confidenceThreshold: _confidenceThreshold,
+            onConfidenceChanged: (value) {
+              setState(() => _confidenceThreshold = value);
+            },
+          ),
+        ),
+        DetectionListPanel(
+          detections: _detections,
+          confidenceThreshold: _confidenceThreshold,
         ),
         Positioned(
-          bottom: 24,
+          bottom: 0,
           left: 0,
           right: 0,
-          child:
-              DetectionStats(detections: _detections, isDarkMode: isDarkMode),
+          child: BottomBar(
+            detectionCount: filteredDetections.length,
+            controller: _controller,
+            onSwitchCamera: _switchCamera,
+            isFlashOn: _isFlashOn,
+            onToggleFlash: _toggleFlash,
+          ),
         ),
       ],
-    );
-  }
-}
-
-class CameraHeader extends StatelessWidget {
-  final int detectionCount;
-  final int fps;
-  final bool isDarkMode;
-
-  const CameraHeader({
-    super.key,
-    required this.detectionCount,
-    required this.fps,
-    required this.isDarkMode,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final backgroundColor =
-        isDarkMode ? const Color(0xF01E293B) : const Color(0xF0FFFFFF);
-
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Safety Detection',
-                  style: theme.textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 4),
-              Text('Real-time monitoring active',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                      color: isDarkMode
-                          ? const Color(0xFF34D399)
-                          : const Color(0xFF10B981))),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.speed,
-                      size: 16, color: theme.colorScheme.secondary),
-                  const SizedBox(width: 6),
-                  Text('$fps FPS',
-                      style: theme.textTheme.labelLarge
-                          ?.copyWith(fontWeight: FontWeight.w600)),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.verified_user,
-                      size: 16, color: theme.colorScheme.secondary),
-                  const SizedBox(width: 6),
-                  Text('$detectionCount objects',
-                      style: theme.textTheme.bodySmall),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class DetectionStats extends StatelessWidget {
-  final List<DetectionResult> detections;
-  final bool isDarkMode;
-
-  const DetectionStats({
-    super.key,
-    required this.detections,
-    required this.isDarkMode,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (detections.isEmpty) return const SizedBox.shrink();
-
-    final theme = Theme.of(context);
-    final backgroundColor =
-        isDarkMode ? const Color(0xF01E293B) : const Color(0xF0FFFFFF);
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.analytics_outlined,
-                  size: 20, color: theme.colorScheme.primary),
-              const SizedBox(width: 10),
-              Text('Detected Objects',
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w700)),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ...detections.map((detection) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child:
-                    DetectionItem(detection: detection, isDarkMode: isDarkMode),
-              )),
-        ],
-      ),
     );
   }
 }
